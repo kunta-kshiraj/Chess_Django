@@ -1,0 +1,90 @@
+/* General page styling */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Oswald', sans-serif;
+    font-size: 20px;
+    text-align: center;
+}
+
+/* Headers styling */
+h1, h2, h3 {
+    text-align: center;
+}
+
+/* Centering the chess container */
+.chess-container {
+    margin: 0 auto;
+    width: fit-content;
+}
+
+/* Chessboard styling */
+table.chessboard {
+    border: 1px solid white;
+    border-collapse: collapse;
+    margin: 0 auto;
+    margin-top: 10px;
+    table-layout: fixed; /* Ensures equal cell width */
+}
+
+.chessboard th, .chessboard td {
+    width: 40px !important;  /* Reduced size with !important */
+    height: 40px !important; /* Reduced size with !important */
+    text-align: center;
+    font-size: 30px !important;  /* Adjusted font size to fit smaller cells */
+    border: 1px solid white;
+    vertical-align: middle;
+}
+
+/* Alternating chessboard square colors */
+.chessboard tr:nth-child(even) td:nth-child(odd),
+.chessboard tr:nth-child(odd) td:nth-child(even) {
+    background-color: tan;
+}
+
+.chessboard tr:nth-child(odd) td:nth-child(odd),
+.chessboard tr:nth-child(even) td:nth-child(even) {
+    background-color: chocolate;
+}
+
+/* Chessboard piece styling */
+.chess-square {
+    font-family: "Arial Unicode MS", "DejaVu Sans", sans-serif !important;
+    font-size: 36px !important; /* Adjusted font size to match the smaller cells */
+    color: black !important;
+}
+
+/* White pieces */
+.chessboard .white-piece {
+    color: #fff !important; /* Force white color */
+}
+
+/* Black pieces */
+.chessboard .black-piece {
+    color: #000 !important; /* Force black color */
+}
+
+.chessboard td {
+    text-align: center;
+    vertical-align: middle;
+    font-family: "Arial Unicode MS", "DejaVu Sans", sans-serif !important;
+}
+
+/* Buttons styling */
+button {
+    display: block;
+    margin: 10px auto;
+}
+
+
+
+.user-list-item {
+    border-bottom: 1px solid #ddd; /* Light gray border */
+    padding: 10px 0; /* Add some padding to make the rows clearer */
+}
+
+.user-list-item:last-child {
+    border-bottom: none; /* Remove border from the last item */
+}
+

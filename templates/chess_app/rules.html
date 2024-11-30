@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Rules</title>
+    {% load static %}
+<link rel="stylesheet" href="{%static 'chessboard.css'%}">
+    <script src="{%static 'chessboard.js'%}"></script>
+    <style>
+         body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            
+        }
+
+        h3, h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-top: 30px;
+            
+        }
+
+        ul {
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 0;
+            list-style-type: none;
+        }
+
+        /* li {
+            
+            font-size: 1.2em;
+            line-height: 1.6;
+        } */
+
+        /* li::before {
+            content: "\2022";
+            color: #2980b9;
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+
+        li b {
+            color: #2980b9;
+        } */
+
+        #info {
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            text-align: justify;
+        }
+
+        p {
+            font-size: 1.1em;
+            line-height: 1.8;
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+
+    </style>
+</head>
+<body>
+    {% include "navigation.html" %}
+    <h3>Chess Pieces</h3>
+    <ul>
+        <li>&#9823;<b>Pawn:</b>Pawns form the game's front line, moving forward one square at a time but capturing diagonally. Their journey across the board is pivotal, often forming structures that defend key pieces and control central space. Their ability to be promoted to a queen, rook, bishop, or knight upon reaching the opposite end of the board adds a layer of strategic depth to the game. Each player starts with eight pawns, making them crucial for both defense and offense as they evolve throughout the game.</li>
+        <li>&#9822;<b>Knight:</b> Knights are noted for their unique movement, navigating in an "L" shape that allows them to jump over other pieces, a capability unmatched by other pieces. This makes them especially useful in dense areas of the board where they can attack positions inaccessible to other pieces. Knights are particularly adept at executing forks, attacking several pieces simultaneously. Each player has two knights, which are most effective in the game's middle phases where their ability to maneuver can change the dynamics on the board.</li>
+        <li>&#9821;<b>Bishop:</b> Operating on diagonals, bishops offer long-range planning and attack capabilities, particularly effective in open boards. Each bishop remains on either all light or all dark squares, thus two bishops together cover the whole board. Their ability to skirt past obstacles offers valuable control and threat from a distance. Players start with two bishops each, maximizing coverage and complementing the movements of other pieces.</li>
+        <li>&#9820;<b>Rook:</b> Rooks are valuable for their ability to control entire rows and columns, moving any number of squares horizontally or vertically. They play a pivotal role in the endgame, where their capacity to cover long distances can help in securing key positions and executing checkmates. Each player begins the game with two rooks, using them to fortify defenses and corner the enemy king.</li>
+        <li>&#9819;<b>Queen:</b> Known as the most powerful piece on the board, the queen's value lies in her versatility and range. She can move any number of squares along a row, column, or diagonal, making her extremely potent in both attacking multiple targets and defending across vast areas of the board. Each player has one queen, whose loss can often signal a significant disadvantage due to her broad capabilities in influencing the game.</li>
+        <li>&#9818;<b>King:</b> The king is the most essential piece in chess, with the game's objective centered on its safety; checkmating the opposing king results in a win. The king is primarily used for defensive purposes but becomes an active participant in the endgame where its ability to move one square in any direction can be crucial for positioning and safety. Each player starts with one king, making it a piece that requires careful planning and protection throughout the game.Moves one square in any direction.</li>
+    </ul>
+    <h2> Rules of Chess</h2>
+    
+    <div id="info">
+        <div>
+            <p>Chess is a two-player strategy board game played on an 8x8 grid. Each player starts with 16 pieces: 8 pawns, 2 knights, 2 bishops, 2 rooks, 1 queen, and 1 king. The goal of the game is to checkmate the opponent's king, which means putting it under threat of capture with no legal move to escape.</p>
+            <p>
+                The pieces are set out as shown in the diagram and photo. Thus, on White's first rank, from left to right, the pieces are placed as follows: rook, knight, bishop, queen, king, bishop, knight, rook. Eight pawns are placed on the second rank. Black's position mirrors White's, with an equivalent piece on the same file. The board is placed with a light square at the right-hand corner nearest to each player. The correct position of the light square may be remembered by the phrase "light on right", while the correct positions of the king and queen may be remembered by the phrase "queen on her own color" (i.e. the white queen begins on a light square, and the black queen on a dark square).
+            </p>
+            <p>
+                In competitive games, the piece colors are allocated to players by the organizers; in informal games, the colors are usually decided randomly, for example by a coin toss, or by one player concealing a white pawn in one hand and a black pawn in the other, and having the opponent choose.
+            </p>
+        </div>
+        <!-- <div >
+            <img src="Chess_bd.png" id="chessimg">
+        </div> -->
+    </div>
+</body>
+</html>

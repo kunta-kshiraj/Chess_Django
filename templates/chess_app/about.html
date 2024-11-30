@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'chessboard.css' %}">
+    <style>
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .profile-image {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%; /* Makes the image circular */
+            object-fit: cover;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            margin-left: 20px;
+        }
+
+        .about-content {
+            flex: 1;
+            font-size: 1.1em;
+            line-height: 1.8;
+            text-align: justify;
+            padding-right: 20px;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+        }
+    </style>
+</head>
+<body>
+    {% include "navigation.html" %}
+
+    <div class="container">
+        <!-- Left: Text content -->
+        <div class="about-content">
+            <h2>About Me</h2>
+            <p>
+                I am Kshiraj Kunta from India, currently doing my masters in computer science. I enjoy building projects related to web development. My interests include Full Stack Web Development and data science. My hobbies are watching movies/series and playing badminton. My goal is to setup a software company in India.
+            </p>
+        </div>
+
+        <!-- Right: Image -->
+        <img src="{% static 'images/kkunta1.jpeg' %}" alt="Profile Picture" class="profile-image">
+    </div>
+
+</body>
+</html>

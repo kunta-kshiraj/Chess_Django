@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Game</title>
+    {% load static %}
+    {% include "bootstrap.html" %}
+    <script src="{% static 'chessboard.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'chessboard.css' %}?v=1.02"/>
+    
+</head>
+<body>
+    {% include "navigation.html" %}
+    
+    <h4 class="text-center">Your Ongoing Game with {{ opponent.username }}</h2>
+    
+    <!-- Display opponent and player information -->
+    <!-- <p>You are playing as: <strong>{{ player_color }}</strong></p> -->
+    <p id="current-turn-display" class="text-center {% if request.user == current_player %}text-success{% else %}text-warning{% endif %}">
+        {% if request.user == current_player %}
+            It is currently your turn.
+        {% else %}
+            Waiting for opponent's move...
+        {% endif %}
+    </p>
+
+    <!-- Chess Board Display -->
+    <table id="t1" border=1 align="center" class="chessboard">
+        {% for row in chessboard %}
+        <tr class="chess_row">
+            <th class="chess_rank">{{ forloop.revcounter }}</th>
+            {% for name, value in row.items %}
+            <td class="chess_cell" id="{{ name }}">
+                {% if value == "&nbsp;" %}
+                    &nbsp;
+                {% else %}
+                    {% autoescape off %}
+                    {% if value.isupper %}
+                        <span class="white-piece">{{ value }}</span>
+                    {% else %}
+                        <span class="black-piece">{{ value }}</span>
+                    {% endif %}
+                    {% endautoescape %}
+                {% endif %}
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+        <tr>
+            <th></th>
+            <th class="chess_file">a</th>
+            <th class="chess_file">b</th>
+            <th class="chess_file">c</th>
+            <th class="chess_file">d</th>
+            <th class="chess_file">e</th>
+            <th class="chess_file">f</th>
+            <th class="chess_file">g</th>
+            <th class="chess_file">h</th>
+        </tr>
+    </table>
+    
+    <!-- Display validation errors if any -->
+    {% if form.errors %}
+    <div class="alert alert-danger mt-3">
+        <ul>
+            {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+            {% endfor %}
+            {% for field, errors in form.errors.items %}
+                <li>{{ field }}: {{ errors|join:", " }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <p class="text-center">You are playing as: <strong>{{ player_color }}</strong></p>
+
+    <!-- Move Form -->
+    <div class="text-center mt-3">
+        <form method="POST" id="move_form">
+            {% csrf_token %}
+            <!-- Conditionally show move inputs if it's the current user's turn -->
+            <div id="move_input_group" {% if request.user != current_player %}style="display: none;"{% endif %}>
+                <label for="move_position"></label>
+                <input type="text" name="move_position" id="move_position" placeholder="Enter e2e4" class="form-control d-inline-block w-auto">
+                <button type="submit" name="move" value="move" class="btn btn-primary">Move</button>
+            </div>
+            <!-- <button type="submit" name="resign" value="resign" class="btn btn-danger mt-2" {% if request.user != current_player %} disabled {% endif %}>Resign</button> -->
+            <button type="submit" name="resign" value="resign" class="btn btn-danger mt-2">Resign</button>
+
+        </form>
+        <p id="not_your_turn_message" class="text-warning" style="display: none;">It's not your turn yet!</p>
+    </div>
+
+    <script type="text/javascript">
+        // Function to update the game board
+        function updateGameBoard(data) {
+            const board = data.board;
+            for (const rank in board) {
+                for (const file in board[rank]) {
+                    const cellId = file;
+                    const cell = document.getElementById(cellId);
+                    const piece = board[rank][file];
+                    if (piece === "&nbsp;") {
+                        cell.innerHTML = "&nbsp;";
+                    } else {
+                        cell.innerHTML = piece;
+                    }
+                }
+            }
+
+            // Update current turn display
+            const currentTurnDisplay = document.getElementById('current-turn-display');
+            const moveInputGroup = document.getElementById('move_input_group');
+            const notYourTurnMessage = document.getElementById('not_your_turn_message');
+
+            if (data.your_turn) {
+                currentTurnDisplay.textContent = "It is currently your turn.";
+                moveInputGroup.style.display = 'block';
+                notYourTurnMessage.style.display = 'none';
+            } else {
+                currentTurnDisplay.textContent = "Waiting for opponent's move...";
+                moveInputGroup.style.display = 'none';
+                notYourTurnMessage.style.display = 'block';
+            }
+
+            // Redirect to game result if the game is finished
+            if (data.status === 'finished') {
+                window.location.href = `/game_result/${data.game_id}/`;
+            }
+        }
+
+        // Function to poll the game status
+        function pollGameStatus() {
+            const url = '{% url "poll_game_status" game.id %}';
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    updateGameBoard(data);
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Set an interval to poll the game status every 5 seconds
+        setInterval(pollGameStatus, 5000);
+
+        // Initial call to update the game board
+        pollGameStatus();
+    </script>
+
+</body>
+</html>

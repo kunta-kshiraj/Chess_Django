@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Result</title>
+    <link rel="stylesheet" href="{% static 'chessboard.css' %}?v=1.01"/>
+    {% include "bootstrap.html" %}
+    <style>
+        .result-image {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            object-fit: cover;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    {% include "navigation.html" %}
+    
+    <div class="container text-center mt-5">
+        <h1>{{ message }}</h1>
+        {% if game.winner == request.user %}
+            <img src="{% static 'images/happy.png' %}" alt="Happy Image" class="result-image">
+        {% else %}
+            <img src="{% static 'images/sad.png' %}" alt="Sad Image" class="result-image">
+        {% endif %}
+        <p>The game between {{ game.player1.username }} and {{ game.player2.username }} has ended.</p>
+        <p><strong>Number of moves:</strong> {{ game.move_count }}</p>
+
+        
+        
+        <a href="{% url 'home' %}" class="btn btn-primary">Return to Home</a>
+    </div>
+</body>
+</html>
