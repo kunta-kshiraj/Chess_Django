@@ -250,10 +250,5 @@
         // Poll every 2 seconds
         setInterval(pollForGame, 2000);
     </script>
-
-<script>
-    const username = "{{ request.user.username|escapejs }}";
-    </script>
-    <script src="{% static 'chat.js' %}"></script>
 </body>
 </html>
