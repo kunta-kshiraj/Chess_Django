@@ -16,6 +16,7 @@ piece_to_html = {
     'p': '&#9823;',  # Black Pawn
 }
 
+
 def board_to_dict(fen):
     board = chess.Board(fen)
     board_dict = []

@@ -40,8 +40,8 @@ urlpatterns = [
     path('edit-journal/<int:game_id>/', view1_app.edit_journal, name='edit_journal'),
     path('delete_game/<int:game_id>/', view1_app.delete_game, name='delete_game'),
 
-    path('poll_available_users/', view1_app.poll_available_users, name='poll_available_users'),
-    path('poll_game_status/<int:game_id>/', view1_app.poll_game_status, name='poll_game_status'),
+    # path('poll_available_users/', view1_app.poll_available_users, name='poll_available_users'),
+    # path('poll_game_status/<int:game_id>/', view1_app.poll_game_status, name='poll_game_status'),
     path('check_for_game/', view1_app.check_for_game, name='check_for_game'),
 
     path('send_challenge/<int:user_id>/', view1_app.send_challenge, name='send_challenge'),

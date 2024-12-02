@@ -8,15 +8,13 @@
     {% include "bootstrap.html" %}
     <script src="{% static 'chessboard.js' %}"></script>
     <link rel="stylesheet" href="{% static 'chessboard.css' %}?v=1.02"/>
-    
 </head>
 <body>
     {% include "navigation.html" %}
     
-    <h4 class="text-center">Your Ongoing Game with {{ opponent.username }}</h2>
+    <h4 class="text-center">Your Ongoing Game with {{ opponent.username }}</h4>
     
     <!-- Display opponent and player information -->
-    <!-- <p>You are playing as: <strong>{{ player_color }}</strong></p> -->
     <p id="current-turn-display" class="text-center {% if request.user == current_player %}text-success{% else %}text-warning{% endif %}">
         {% if request.user == current_player %}
             It is currently your turn.
@@ -60,94 +58,92 @@
         </tr>
     </table>
     
-    <!-- Display validation errors if any -->
-    {% if form.errors %}
-    <div class="alert alert-danger mt-3">
-        <ul>
-            {% for error in form.non_field_errors %}
-                <li>{{ error }}</li>
-            {% endfor %}
-            {% for field, errors in form.errors.items %}
-                <li>{{ field }}: {{ errors|join:", " }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-    
     <p class="text-center">You are playing as: <strong>{{ player_color }}</strong></p>
 
     <!-- Move Form -->
     <div class="text-center mt-3">
-        <form method="POST" id="move_form">
-            {% csrf_token %}
-            <!-- Conditionally show move inputs if it's the current user's turn -->
+        <form id="move_form">
             <div id="move_input_group" {% if request.user != current_player %}style="display: none;"{% endif %}>
-                <label for="move_position"></label>
-                <input type="text" name="move_position" id="move_position" placeholder="Enter e2e4" class="form-control d-inline-block w-auto">
-                <button type="submit" name="move" value="move" class="btn btn-primary">Move</button>
+                <input type="text" id="move_position" placeholder="Enter e2e4" class="form-control d-inline-block w-auto">
+                <button type="button" id="move_button" class="btn btn-primary">Move</button>
             </div>
-            <!-- <button type="submit" name="resign" value="resign" class="btn btn-danger mt-2" {% if request.user != current_player %} disabled {% endif %}>Resign</button> -->
-            <button type="submit" name="resign" value="resign" class="btn btn-danger mt-2">Resign</button>
-
         </form>
-        <p id="not_your_turn_message" class="text-warning" style="display: none;">It's not your turn yet!</p>
+        <button type="button" id="resign_button" class="btn btn-danger mt-2">Resign</button>
     </div>
 
-    <script type="text/javascript">
-        // Function to update the game board
-        function updateGameBoard(data) {
-            const board = data.board;
-            for (const rank in board) {
-                for (const file in board[rank]) {
-                    const cellId = file;
-                    const cell = document.getElementById(cellId);
-                    const piece = board[rank][file];
-                    if (piece === "&nbsp;") {
-                        cell.innerHTML = "&nbsp;";
-                    } else {
-                        cell.innerHTML = piece;
-                    }
-                }
+    <script>
+        const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        const gameId = "{{ game.id }}"; // Game ID from the backend
+        const currentUserId = "{{ request.user.id }}"; // Current user ID as a string
+        const gameSocket = new WebSocket(`${protocol}${window.location.host}/ws/game/${gameId}/`);
+    
+        // WebSocket connection open handler
+        gameSocket.onopen = function () {
+            console.log("WebSocket connection established.");
+        };
+    
+        // WebSocket message handler
+        gameSocket.onmessage = function (e) {
+    const data = JSON.parse(e.data);
+
+    if (data.type === "game_update") {
+        console.log("Game update received:", data);
+
+        const board = data.board;
+
+        // Update each cell on the chessboard
+        for (const rank in board) {
+            for (const file in board[rank]) {
+                const cellId = file; // File corresponds to cell ID
+                const cell = document.getElementById(cellId);
+                const piece = board[rank][file];
+                cell.innerHTML = piece === "&nbsp;" ? "&nbsp;" : piece; // Update piece
             }
+        }
 
-            // Update current turn display
-            const currentTurnDisplay = document.getElementById('current-turn-display');
-            const moveInputGroup = document.getElementById('move_input_group');
-            const notYourTurnMessage = document.getElementById('not_your_turn_message');
+        // Update current turn display
+        const currentUserId = "{{ request.user.id }}";
+        const currentTurnDisplay = document.getElementById("current-turn-display");
+        currentTurnDisplay.textContent =
+            parseInt(data.current_turn) === parseInt(currentUserId)
+                ? "It is currently your turn."
+                : "Waiting for opponent's move...";
+    } else if (data.type === "game_over") {
+        alert(`Game over! Winner: ${data.winner}`);
+        window.location.href = `/game_result/${gameId}/`;
+    } else if (data.error) {
+        alert(data.error);
+    }
+};
 
-            if (data.your_turn) {
-                currentTurnDisplay.textContent = "It is currently your turn.";
-                moveInputGroup.style.display = 'block';
-                notYourTurnMessage.style.display = 'none';
+    
+        // WebSocket connection close handler
+        gameSocket.onclose = function () {
+            console.log("WebSocket connection closed.");
+        };
+    
+        // Move button click handler
+        document.getElementById("move_button").addEventListener("click", function () {
+            const moveInput = document.getElementById("move_position").value.trim();
+            if (moveInput) {
+                console.log(`Sending move: ${moveInput}`);
+                gameSocket.send(JSON.stringify({ action: "move", move: moveInput }));
+                document.getElementById("move_position").value = "";
             } else {
-                currentTurnDisplay.textContent = "Waiting for opponent's move...";
-                moveInputGroup.style.display = 'none';
-                notYourTurnMessage.style.display = 'block';
+                alert("Please enter a valid move.");
             }
+        });
 
-            // Redirect to game result if the game is finished
-            if (data.status === 'finished') {
-                window.location.href = `/game_result/${data.game_id}/`;
+    
+        // Resign button click handler
+        document.getElementById("resign_button").addEventListener("click", function () {
+            if (confirm("Are you sure you want to resign?")) {
+                // Send resign action via WebSocket
+                gameSocket.send(JSON.stringify({ action: "resign" }));
+                console.log("Resignation sent.");
             }
-        }
-
-        // Function to poll the game status
-        function pollGameStatus() {
-            const url = '{% url "poll_game_status" game.id %}';
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    updateGameBoard(data);
-                })
-                .catch(error => console.error('Error:', error));
-        }
-
-        // Set an interval to poll the game status every 5 seconds
-        setInterval(pollGameStatus, 5000);
-
-        // Initial call to update the game board
-        pollGameStatus();
+        });
     </script>
-
+    
 </body>
 </html>

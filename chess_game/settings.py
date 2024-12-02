@@ -31,7 +31,7 @@ SECRET_KEY = "django-insecure-40ww^ivprx43o7tdswagi0%ws=#s+ve03gtw7xs*$#-n+9qgcd
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
-CSRF_TRUSTED_ORIGINS = ['https://localhost:8000', 'https://localhost:80', 'https://project2.chessbykshiraj.com']
+CSRF_TRUSTED_ORIGINS = ['https://turbo-funicular-59jvg4jqg5r3pg4x-8000.app.github.dev','https://localhost:8000', 'https://localhost:80', 'https://project2.chessbykshiraj.com']
 
 # Application definition
 

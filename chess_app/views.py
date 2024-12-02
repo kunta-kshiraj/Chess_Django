@@ -17,50 +17,126 @@ from chess_app.forms import ChessForm, JoinForm, LoginForm, MoveForm
 from .models import ChessGame, Challenge, Game
 from .utils import board_to_dict, apply_move_to_board
 from django.http import JsonResponse
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 
 # Handle sending challenges to users
 @csrf_exempt
-@login_required(login_url='/login/')
+@login_required
 def send_challenge(request, user_id):
+    """Handle sending a challenge to another user."""
     if request.method == "POST":
-        challenged_user = User.objects.get(id=user_id)
-        
-        # Check if there is an ongoing game between the users
-        existing_game = Game.objects.filter(
-            (Q(player1=request.user, player2=challenged_user) | Q(player1=challenged_user, player2=request.user)),
-            status='ongoing'  # Only look for ongoing games
-        ).first()
+        try:
+            logger.info(f"User {request.user.id} is sending a challenge to User {user_id}")
+            challenged_user = User.objects.get(id=user_id)
 
-        if existing_game:
-            return JsonResponse({'status': 'error', 'error': "An ongoing game already exists between you and this user."})
+            # Check for existing games or challenges
+            if Game.objects.filter(
+                Q(player1=request.user, player2=challenged_user) |
+                Q(player1=challenged_user, player2=request.user),
+                status='ongoing'
+            ).exists():
+                logger.error("An ongoing game already exists.")
+                return JsonResponse({'status': 'error', 'error': "An ongoing game already exists."})
 
-        # Check if a pending challenge already exists between these users
-        existing_challenge = Challenge.objects.filter(
-            (Q(challenger=request.user, challenged=challenged_user) | Q(challenger=challenged_user, challenged=request.user)),
-            status='pending'
-        ).first()
+            if Challenge.objects.filter(
+                Q(challenger=request.user, challenged=challenged_user) |
+                Q(challenger=challenged_user, challenged=request.user),
+                status='pending'
+            ).exists():
+                logger.error("A pending challenge already exists.")
+                return JsonResponse({'status': 'error', 'error': "A pending challenge already exists."})
 
-        if existing_challenge:
-            return JsonResponse({'status': 'error', 'error': "A pending challenge already exists between you and this user."})
-        # If no ongoing game and no pending challenge, create a new challenge
-        Challenge.objects.create(challenger=request.user, challenged=challenged_user)
-        return JsonResponse({'status': 'success'})
+            # Create the challenge and send a WebSocket notification
+            Challenge.objects.create(challenger=request.user, challenged=challenged_user, status='pending')
+            logger.info(f"Challenge created between User {request.user.id} and User {user_id}")
 
-        
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"user_{challenged_user.id}",
+                {
+                    "type": "send_challenge_notification",
+                    "data": {
+                        "challenger_id": request.user.id,
+                        "challenger_username": request.user.username,
+                    },
+                }
+            )
+            return JsonResponse({'status': 'success'})
+
+        except User.DoesNotExist:
+            logger.error(f"User {user_id} does not exist.")
+            return JsonResponse({'status': 'error', 'error': "User does not exist."})
+
+@login_required(login_url='/login/')
+@csrf_exempt
+def handle_challenge(request, user_id, action):
+    """Handle accepting or rejecting a challenge."""
+    if request.method == "POST":
+        try:
+            challenge = Challenge.objects.get(
+                challenger_id=user_id,
+                challenged=request.user,
+                status='pending'
+            )
+
+            if action == 'accept':
+                challenge.status = 'accepted'
+                challenge.save()
+
+                # Create the game
+                player_board = ChessGame.objects.create(
+                    user=request.user,
+                    fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+                )
+                game = Game.objects.create(
+                    player1=challenge.challenger,
+                    player2=challenge.challenged,
+                    board=player_board,
+                    current_turn=challenge.challenger
+                )
+                logger.info(f"Game {game.id} created between User {challenge.challenger.id} and User {challenge.challenged.id}")
+
+                # Notify both users via WebSocket
+                channel_layer = get_channel_layer()
+                for user in [challenge.challenger, challenge.challenged]:
+                    async_to_sync(channel_layer.group_send)(
+                        f"user_{user.id}",
+                        {
+                            "type": "send_challenge_notification",
+                            "data": {
+                                "redirect": True,
+                                "game_id": game.id,
+                            },
+                        }
+                    )
+                return JsonResponse({'status': 'success', 'game_id': game.id})
+
+            elif action == 'reject':
+                challenge.status = 'declined'
+                challenge.save()
+                logger.info(f"Challenge between User {user_id} and User {request.user.id} was rejected.")
+                return JsonResponse({'status': 'success'})
+
+        except Challenge.DoesNotExist:
+            logger.error(f"Challenge not found between User {user_id} and User {request.user.id}.")
+            return JsonResponse({'status': 'error', 'error': "Challenge not found."})
 
 
 @never_cache
 @csrf_exempt
 @login_required(login_url='/login/')
 def home(request):
-    # Check if there is any ongoing game
     try:
-        # Check if the user is part of any ongoing game
+        # Check for ongoing games
         ongoing_game = Game.objects.filter(
-            (Q(player1=request.user) | Q(player2=request.user)) & Q(winner__isnull=True)
+            (Q(player1=request.user) | Q(player2=request.user)) & Q(status='ongoing')
         ).first()
-
-        # If there's an ongoing game, redirect to the game view
         if ongoing_game:
             return redirect('play_game', game_id=ongoing_game.id)
 
@@ -68,99 +144,23 @@ def home(request):
         pass
 
     active_users = User.objects.filter(is_active=True).exclude(id=request.user.id)
-    form = ChessForm()
 
     # Fetch pending challenges where the current user is being challenged
     received_challenges = Challenge.objects.filter(challenged=request.user, status='pending')
 
+    # Fetch pending challenges sent by the current user
     sent_challenges = Challenge.objects.filter(challenger=request.user, status='pending')
 
-
+    # Lists for template logic
     challengers_list = list(received_challenges.values_list('challenger_id', flat=True))
     challenged_user_ids = list(sent_challenges.values_list('challenged_id', flat=True))
 
-
-    if request.method == 'POST':
-        if 'challenge' in request.POST:
-            opponent_id = request.POST.get('challenge')
-            opponent = User.objects.get(id=opponent_id)
-
-            # Check if a pending or ongoing challenge already exists between the two users
-            existing_challenge = Challenge.objects.filter(
-                challenger=request.user, challenged=opponent, status='pending'
-            ).first()
-
-            if existing_challenge:
-                return HttpResponse("A pending challenge already exists between you and this user.", status=400)
-
-
-            # Create a new challenge if no pending or ongoing challenge exists
-            Challenge.objects.create(challenger=request.user, challenged=opponent, status='pending')
-            messages.success(request, f"Challenge sent to {opponent.username}!")
-            return redirect('home')
-
-        elif 'accept' in request.POST or 'reject' in request.POST:
-            challenge_id = request.POST.get('accept') or request.POST.get('reject')
-            try:
-                challenge = Challenge.objects.get(id=challenge_id)
-            except Challenge.DoesNotExist:
-                return HttpResponse("Challenge not found", status=404)
-            if 'accept' in request.POST:
-                if challenge.status == 'pending':
-                    challenge.status = 'accepted'
-                    challenge.save()
-
-                    # Check if a game already exists between the players and if it is finished
-                    # existing_game = Game.objects.filter(
-                    #     Q(player1=challenge.challenger, player2=challenge.challenged) |
-                    #     Q(player1=challenge.challenged, player2=challenge.challenger)
-                    # ).exclude(status='finished').first()
-
-                    # if existing_game:
-                    #     messages.error(request, "An ongoing game already exists between you and this user.")
-                    #     return redirect('home')
-
-                    # Create a new chess game when the challenge is accepted
-                    player_board = ChessGame.objects.create(
-                        user=challenge.challenged,
-                        fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-                    )
-                    game = Game.objects.create(
-                        player1=challenge.challenger,
-                        player2=challenge.challenged,
-                        board=player_board,
-                        current_turn=challenge.challenger,
-                        # status='ongoing'  # Mark the game as ongoing
-                    )
-                    messages.success(request, "Game started!")
-                    return redirect('play_game', game_id=game.id)
-
-            elif 'reject' in request.POST:
-                if challenge.status == 'pending':
-                    challenge.status = 'declined'
-                    challenge.save()
-                    messages.info(request, "Challenge rejected.")
-            return redirect('home')
-
-
-    # Fetch completed games where the user is either player1 or player2
-    # completed_games = Game.objects.filter(
-    #     (Q(player1=request.user) | Q(player2=request.user)) & Q(status='finished')
-    # ).order_by('-updated_at')
-
-    # # Prefetch journal entries for the current user
-    # completed_games = completed_games.prefetch_related(
-    #     Prefetch(
-    #         'journalentry_set',
-    #         queryset=JournalEntry.objects.filter(user=request.user),
-    #         to_attr='user_journal_entries'
-    #     )
-    # )
-
-    # Fetch completed games where the user is either player1 or player2 and has not marked the game as deleted
+    # Fetch completed games
     completed_games = Game.objects.filter(
         (Q(player1=request.user) | Q(player2=request.user)) & Q(status='finished')
-    ).exclude(id__in=DeletedGame.objects.filter(user=request.user).values_list('game_id', flat=True)).order_by('-updated_at')
+    ).exclude(
+        id__in=DeletedGame.objects.filter(user=request.user).values_list('game_id', flat=True)
+    ).order_by('-updated_at')
 
     # Prefetch journal entries for the current user
     completed_games = completed_games.prefetch_related(
@@ -171,18 +171,18 @@ def home(request):
         )
     )
 
-
-    page_data = {
-        "chess_form": form,
+    return render(request, 'chess_app/home.html', {
         "active_users": active_users,
         "challengers_list": challengers_list,
+        "challenged_user_ids": challenged_user_ids,
         "received_challenges": received_challenges,
-        "challenged_user_ids": challenged_user_ids,  # Pass pending challenge user IDs
-        "completed_games": completed_games,  # Pass the completed games to the template
-    }
+        "completed_games": completed_games,
+    })
+    
 
-    return render(request, 'chess_app/home.html', page_data)
 
+@csrf_exempt
+@login_required(login_url='/login/')
 @csrf_exempt
 @login_required(login_url='/login/')
 def play_game(request, game_id):
@@ -209,8 +209,8 @@ def play_game(request, game_id):
     # Identify the player and the opponent
     player_color = "White" if is_white else "Black"
     opponent = game.player2 if request.user == game.player1 else game.player1
-    opponent_color = "Black" if is_white else "White"
 
+    # Check for game termination conditions
     if chess_board.is_checkmate():
         game.status = 'finished'
         game.winner = opponent if current_player == request.user else request.user
@@ -224,54 +224,51 @@ def play_game(request, game_id):
         return redirect('game_result', game_id=game.id)
 
     if request.method == 'POST':
+        form = ChessForm(request.POST)
         if 'resign' in request.POST:
             # If the player resigns, set the opponent as the winner
-            game.winner = game.player2 if request.user == game.player1 else game.player1
+            game.winner = opponent
             game.status = 'finished'  # Mark the game as finished
             game.save()
 
             # Redirect both players to the result page
             return redirect('game_result', game_id=game.id)
 
-        elif 'move' in request.POST:
-            form = ChessForm(request.POST)
-            if form.is_valid():
-                move_position = form.cleaned_data.get('move_position')
+        elif 'move' in request.POST and form.is_valid():
+            move_position = form.cleaned_data.get('move_position')
 
-                if not move_position or len(move_position) != 4:
-                    form.add_error(None, "Move must consist of exactly 4 characters (e.g., 'e2e4').")
-                else:
-                    start_position = move_position[:2]  # Extract 'e2'
-                    end_position = move_position[2:]    # Extract 'e4'
-                    try:
-                        move = chess.Move.from_uci(start_position + end_position)
+            if not move_position or len(move_position) != 4:
+                form.add_error(None, "Move must consist of exactly 4 characters (e.g., 'e2e4').")
+            else:
+                start_position = move_position[:2]  # Extract 'e2'
+                end_position = move_position[2:]    # Extract 'e4'
+                try:
+                    move = chess.Move.from_uci(start_position + end_position)
 
-                        # Ensure the move is legal and it's the player's turn
-                        if move in chess_board.legal_moves:
-                            # Check if the user is moving their own pieces
-                            moving_piece = chess_board.piece_at(chess.SQUARE_NAMES.index(start_position))
-                            if moving_piece is None:
-                                form.add_error(None, "No piece at the start position.")
-                            elif (moving_piece.color == chess.WHITE and not is_white) or (moving_piece.color == chess.BLACK and is_white):
-                                form.add_error(None, "You can only move your own pieces.")
-                            else:
-                                # Apply the move
-                                chess_board.push(move)
-                                game.board.fen = chess_board.fen()  # Update the FEN after the move
-                                game.board.save()
-                                
-                                game.move_count+=1
-                                game.save()
-
-                                # Switch the turn to the next player
-                                game.current_turn = game.player1 if game.current_turn == game.player2 else game.player2
-                                game.save()
-
-                                return redirect('play_game', game_id=game.id)
+                    # Ensure the move is legal and it's the player's turn
+                    if move in chess_board.legal_moves:
+                        # Check if the user is moving their own pieces
+                        piece = chess_board.piece_at(chess.parse_square(start_position))
+                        if piece is None:
+                            form.add_error(None, "No piece at the start position.")
+                        elif (piece.color == chess.WHITE and not is_white) or (piece.color == chess.BLACK and is_white):
+                            form.add_error(None, "You can only move your own pieces.")
                         else:
-                            form.add_error(None, "Illegal move: The move is not allowed.")
-                    except ValueError:
-                        form.add_error(None, "Invalid move format. Use correct notation like 'e2e4'.")
+                            # Apply the move
+                            chess_board.push(move)
+                            new_fen = chess_board.fen()
+                            game.board.fen = new_fen  # Update the FEN after the move
+                            game.board.save()
+
+                            game.move_count += 1
+                            game.current_turn = opponent
+                            game.save()
+
+                            return redirect('play_game', game_id=game.id)
+                    else:
+                        form.add_error(None, "Illegal move: The move is not allowed.")
+                except ValueError:
+                    form.add_error(None, "Invalid move format. Use correct notation like 'e2e4'.")
 
     else:
         form = ChessForm()
@@ -288,7 +285,6 @@ def play_game(request, game_id):
         'player_color': player_color,
         'opponent': opponent,
     })
-
 
 
 @csrf_exempt
@@ -448,43 +444,43 @@ def edit_journal(request, game_id):
 
 @csrf_exempt
 @login_required
-def poll_available_users(request):
-    active_users = User.objects.filter(is_active=True).exclude(id=request.user.id)
-    users_data = []
+# def poll_available_users(request):
+#     active_users = User.objects.filter(is_active=True).exclude(id=request.user.id)
+#     users_data = []
 
-    for user in active_users:
-        # Check if there is a pending challenge between the logged-in user and this user
-        if Challenge.objects.filter(challenger=request.user, challenged=user, status='pending').exists():
-            has_challenge = 'sent'
-        elif Challenge.objects.filter(challenger=user, challenged=request.user, status='pending').exists():
-            has_challenge = 'received'
-        else:
-            has_challenge = None
+#     for user in active_users:
+#         # Check if there is a pending challenge between the logged-in user and this user
+#         if Challenge.objects.filter(challenger=request.user, challenged=user, status='pending').exists():
+#             has_challenge = 'sent'
+#         elif Challenge.objects.filter(challenger=user, challenged=request.user, status='pending').exists():
+#             has_challenge = 'received'
+#         else:
+#             has_challenge = None
 
-        users_data.append({
-            "id": user.id,
-            "username": user.username,
-            "has_challenge": has_challenge
-        })
+#         users_data.append({
+#             "id": user.id,
+#             "username": user.username,
+#             "has_challenge": has_challenge
+#         })
 
-    return JsonResponse({'active_users': users_data})
+#     return JsonResponse({'active_users': users_data})
 
-@csrf_exempt
-@login_required
-def poll_game_status(request, game_id):
-    try:
-        game = Game.objects.get(id=game_id)
-    except Game.DoesNotExist:
-        return JsonResponse({'error': 'Game not found'}, status=404)
+# @csrf_exempt
+# @login_required
+# def poll_game_status(request, game_id):
+#     try:
+#         game = Game.objects.get(id=game_id)
+#     except Game.DoesNotExist:
+#         return JsonResponse({'error': 'Game not found'}, status=404)
 
-    # Return the game state as a JSON response
-    return JsonResponse({
-        'status': game.status,
-        'board': board_to_dict(game.board.fen),  # Update the board
-        'current_turn': game.current_turn.username,
-        'your_turn': (game.current_turn == request.user),
-        'game_id': game.id
-    })
+#     # Return the game state as a JSON response
+#     return JsonResponse({
+#         'status': game.status,
+#         'board': board_to_dict(game.board.fen),  # Update the board
+#         'current_turn': game.current_turn.username,
+#         'your_turn': (game.current_turn == request.user),
+#         'game_id': game.id
+#     })
 
 @csrf_exempt
 @login_required
@@ -503,36 +499,60 @@ def check_for_game(request):
         return JsonResponse({'game_started': False})
 
 
-@login_required(login_url='/login/')
-@csrf_exempt
-def handle_challenge(request, user_id, action):
-    if request.method == "POST":
-        try:
-            if action not in ['accept', 'reject']:
-                return JsonResponse({'status': 'error', 'error': 'Invalid action'}, status=400)
 
-            challenge = Challenge.objects.get(challenger_id=user_id, challenged=request.user, status='pending')
-            if action == 'accept':
-                challenge.status = 'accepted'
-                challenge.save()
+# @login_required(login_url='/login/')
+# @csrf_exempt
+# @csrf_exempt
+# @login_required
+# def handle_challenge(request, user_id, action):
+#     """Handle accepting or rejecting a challenge."""
+#     if request.method == "POST":
+#         try:
+#             challenge = Challenge.objects.get(
+#                 challenger_id=user_id, 
+#                 challenged=request.user, 
+#                 status='pending'
+#             )
 
-                # Create the game
-                player_board = ChessGame.objects.create(
-                    user=request.user,
-                    fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-                )
-                game = Game.objects.create(
-                    player1=challenge.challenger,
-                    player2=challenge.challenged,
-                    board=player_board,
-                    current_turn=challenge.challenger,
-                )
-                return JsonResponse({'status': 'success', 'game_id': game.id})
+#             if action == 'accept':
+#                 challenge.status = 'accepted'
+#                 challenge.save()
 
-            elif action == 'reject':
-                challenge.status = 'declined'
-                challenge.save()
-                return JsonResponse({'status': 'success'})
+#                 # Create the game
+#                 player_board = ChessGame.objects.create(
+#                     user=request.user,
+#                     fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+#                 )
+#                 game = Game.objects.create(
+#                     player1=challenge.challenger,
+#                     player2=challenge.challenged,
+#                     board=player_board,
+#                     current_turn=challenge.challenger
+#                 )
+#                 logger.info(f"Game {game.id} created between User {challenge.challenger.id} and User {challenge.challenged.id}")
 
-        except Challenge.DoesNotExist:
-            return JsonResponse({'status': 'error', 'error': 'Challenge not found'}, status=404)
+#                 # Notify both users via WebSocket
+#                 channel_layer = get_channel_layer()
+#                 for user in [challenge.challenger, challenge.challenged]:
+#                     async_to_sync(channel_layer.group_send)(
+#                         f"user_{user.id}",
+#                         {
+#                             "type": "send_challenge_notification",
+#                             "data": {
+#                                 "redirect": True,
+#                                 "game_id": game.id,
+#                             },
+#                         }
+#                     )
+#                 return JsonResponse({'status': 'success', 'game_id': game.id})
+
+#             elif action == 'reject':
+#                 challenge.status = 'declined'
+#                 challenge.save()
+#                 logger.info(f"Challenge between User {user_id} and User {request.user.id} was rejected.")
+#                 return JsonResponse({'status': 'success'})
+
+#         except Challenge.DoesNotExist:
+#             logger.error(f"Challenge not found between User {user_id} and User {request.user.id}.")
+#             return JsonResponse({'status': 'error', 'error': "Challenge not found."})
+
