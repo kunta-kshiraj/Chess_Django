@@ -84,7 +84,6 @@ class Game(models.Model):
         return f"Game between {self.player1.username} and {self.player2.username}"
 
 
-
 class JournalEntry(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chess_journal_entries')
     game = models.ForeignKey(Game, on_delete=models.CASCADE)

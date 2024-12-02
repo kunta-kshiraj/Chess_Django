@@ -1,4 +1,9 @@
+# utils.py
 import chess
+import logging
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Mapping of chess pieces to their corresponding HTML Unicode symbols
 piece_to_html = {
@@ -16,28 +21,40 @@ piece_to_html = {
     'p': '&#9823;',  # Black Pawn
 }
 
-
 def board_to_dict(fen):
+    """
+    Converts a FEN string into a list of dictionaries representing each row of the chessboard.
+    Each cell contains the HTML Unicode symbol for the piece or a non-breaking space if empty.
+    """
     board = chess.Board(fen)
     board_dict = []
-    for rank in reversed(range(1, 9)): 
+    for rank in reversed(range(1, 9)):
         row = {}
-        for file in range(8):  
-            square_name = chess.square_name(chess.square(file, rank - 1)) 
-            piece = board.piece_at(chess.square(file, rank - 1))
+        for file in range(8):
+            square_index = chess.square(file, rank - 1)
+            square_name = chess.square_name(square_index)
+            piece = board.piece_at(square_index)
             if piece:
-                
                 row[square_name] = piece_to_html.get(piece.symbol(), piece.symbol())
             else:
-                row[square_name] = "&nbsp;"  
+                row[square_name] = "&nbsp;"
         board_dict.append(row)
-    
     return board_dict
 
-def apply_move_to_board(fen, src, dst):
-    board = chess.Board(fen)
-    move = chess.Move.from_uci(f"{src}{dst}")
-    if move in board.legal_moves:
-        board.push(move)
-        return board.fen()  # Return the updated FEN string
-    raise ValueError("Invalid move")
+def apply_move_to_board(fen, move):
+    """
+    Applies a move to the board represented by the FEN string.
+    Returns the updated FEN string after the move is applied.
+    Raises ValueError if the move is invalid.
+    """
+    try:
+        board = chess.Board(fen)
+        chess_move = chess.Move.from_uci(move)
+        if chess_move in board.legal_moves:
+            board.push(chess_move)
+            return board.fen()
+        else:
+            raise ValueError("Invalid move.")
+    except Exception as e:
+        logger.exception("Exception in apply_move_to_board: %s", e)
+        raise ValueError("Invalid move.")

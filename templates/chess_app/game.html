@@ -1,18 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Head content -->
     <title>Chess Game</title>
     {% load static %}
     {% include "bootstrap.html" %}
+    <link rel="stylesheet" href="{% static 'chessboard.css' %}">
     <script src="{% static 'chessboard.js' %}"></script>
-    <link rel="stylesheet" href="{% static 'chessboard.css' %}?v=1.02"/>
 </head>
 <body>
     {% include "navigation.html" %}
     
-    <h4 class="text-center">Your Ongoing Game with {{ opponent.username }}</h4>
+    <h4 class="text-center">Your Game with {{ opponent.username }}</h4>
     
     <!-- Display opponent and player information -->
     <p id="current-turn-display" class="text-center {% if request.user == current_player %}text-success{% else %}text-warning{% endif %}">
@@ -24,37 +23,21 @@
     </p>
 
     <!-- Chess Board Display -->
-    <table id="t1" border=1 align="center" class="chessboard">
-        {% for row in chessboard %}
-        <tr class="chess_row">
-            <th class="chess_rank">{{ forloop.revcounter }}</th>
-            {% for name, value in row.items %}
-            <td class="chess_cell" id="{{ name }}">
-                {% if value == "&nbsp;" %}
-                    &nbsp;
-                {% else %}
-                    {% autoescape off %}
-                    {% if value.isupper %}
-                        <span class="white-piece">{{ value }}</span>
-                    {% else %}
-                        <span class="black-piece">{{ value }}</span>
-                    {% endif %}
-                    {% endautoescape %}
-                {% endif %}
-            </td>
+    <table id="chessboard" border="1" align="center" class="chessboard">
+        <!-- Generate empty cells with correct IDs -->
+        {% for rank in "87654321" %}
+        <tr>
+            <th class="chess_rank">{{ rank }}</th>
+            {% for file in "abcdefgh" %}
+            <td id="{{ file }}{{ rank }}" class="chess_cell">&nbsp;</td>
             {% endfor %}
         </tr>
         {% endfor %}
         <tr>
             <th></th>
-            <th class="chess_file">a</th>
-            <th class="chess_file">b</th>
-            <th class="chess_file">c</th>
-            <th class="chess_file">d</th>
-            <th class="chess_file">e</th>
-            <th class="chess_file">f</th>
-            <th class="chess_file">g</th>
-            <th class="chess_file">h</th>
+            {% for file in "abcdefgh" %}
+            <th class="chess_file">{{ file }}</th>
+            {% endfor %}
         </tr>
     </table>
     
@@ -62,88 +45,177 @@
 
     <!-- Move Form -->
     <div class="text-center mt-3">
-        <form id="move_form">
-            <div id="move_input_group" {% if request.user != current_player %}style="display: none;"{% endif %}>
-                <input type="text" id="move_position" placeholder="Enter e2e4" class="form-control d-inline-block w-auto">
-                <button type="button" id="move_button" class="btn btn-primary">Move</button>
-            </div>
-        </form>
+        <div id="move_input_group" {% if request.user != current_player %}style="display: none;"{% endif %}>
+            <input type="text" id="move_position" placeholder="Enter e2e4" class="form-control d-inline-block w-auto">
+            <button type="button" id="move_button" class="btn btn-primary">Move</button>
+        </div>
         <button type="button" id="resign_button" class="btn btn-danger mt-2">Resign</button>
     </div>
 
     <script>
-        const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-        const gameId = "{{ game.id }}"; // Game ID from the backend
-        const currentUserId = "{{ request.user.id }}"; // Current user ID as a string
-        const gameSocket = new WebSocket(`${protocol}${window.location.host}/ws/game/${gameId}/`);
-    
+        const gameId = "{{ game.id }}";
+        const userId = "{{ request.user.id }}";
+        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+        const gameSocket = new WebSocket(
+            wsScheme + '://' + window.location.host + '/ws/game/' + gameId + '/'
+        );
+
         // WebSocket connection open handler
         gameSocket.onopen = function () {
             console.log("WebSocket connection established.");
+            // Initial board rendering
+            const initialFen = "{{ game.board.fen }}";
+            if (initialFen) {
+                updateBoard(initialFen);
+            } else {
+                console.error("Initial FEN is missing.");
+            }
         };
-    
+
+        // WebSocket error handler
+        gameSocket.onerror = function(e) {
+            console.error('WebSocket error:', e);
+            alert('WebSocket encountered an error. Please refresh the page.');
+        };
+
         // WebSocket message handler
-        gameSocket.onmessage = function (e) {
-    const data = JSON.parse(e.data);
+        gameSocket.onmessage = function(e) {
+            try {
+                const data = JSON.parse(e.data);
 
-    if (data.type === "game_update") {
-        console.log("Game update received:", data);
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    console.log("Game update received:", data);
 
-        const board = data.board;
+                    // Check if 'fen' exists before updating the board
+                    if (data.fen) {
+                        // Update the board with new FEN
+                        updateBoard(data.fen);
+                    }
 
-        // Update each cell on the chessboard
-        for (const rank in board) {
-            for (const file in board[rank]) {
-                const cellId = file; // File corresponds to cell ID
-                const cell = document.getElementById(cellId);
-                const piece = board[rank][file];
-                cell.innerHTML = piece === "&nbsp;" ? "&nbsp;" : piece; // Update piece
+                    // Update current turn display
+                    const currentTurnDisplay = document.getElementById("current-turn-display");
+                    if (data.current_turn === "{{ request.user.username }}") {
+                        currentTurnDisplay.textContent = "It is currently your turn.";
+                        document.getElementById("move_input_group").style.display = "block";
+                    } else if (data.current_turn) {
+                        currentTurnDisplay.textContent = "Waiting for opponent's move...";
+                        document.getElementById("move_input_group").style.display = "none";
+                    } else {
+                        // No current turn means game is finished
+                        currentTurnDisplay.textContent = "Game over.";
+                        document.getElementById("move_input_group").style.display = "none";
+                    }
+
+                    // Check for game over
+                    if (data.status === 'finished') {
+                        alert(`Game over! Winner: ${data.winner || "Draw"}`);
+                        window.location.href = `{% url 'game_result' game.id %}`;
+                    }
+                }
+            } catch (err) {
+                console.error("Error parsing WebSocket message:", err);
+            }
+        };
+
+        // WebSocket connection close handler
+        gameSocket.onclose = function (e) {
+            console.log("WebSocket connection closed.");
+            alert('WebSocket connection closed. Please refresh the page.');
+        };
+
+        // Function to send a move
+        function sendMove(move) {
+            if (gameSocket.readyState === WebSocket.OPEN) {
+                gameSocket.send(JSON.stringify({
+                    'action': 'move',
+                    'move': move
+                }));
+            } else {
+                alert('WebSocket connection is closed.');
             }
         }
 
-        // Update current turn display
-        const currentUserId = "{{ request.user.id }}";
-        const currentTurnDisplay = document.getElementById("current-turn-display");
-        currentTurnDisplay.textContent =
-            parseInt(data.current_turn) === parseInt(currentUserId)
-                ? "It is currently your turn."
-                : "Waiting for opponent's move...";
-    } else if (data.type === "game_over") {
-        alert(`Game over! Winner: ${data.winner}`);
-        window.location.href = `/game_result/${gameId}/`;
-    } else if (data.error) {
-        alert(data.error);
-    }
-};
+        // Function to handle resign action
+        function resignGame() {
+            if (gameSocket.readyState === WebSocket.OPEN) {
+                gameSocket.send(JSON.stringify({
+                    'action': 'resign'
+                }));
+                console.log("Resignation sent.");
+            } else {
+                alert('WebSocket connection is closed.');
+            }
+        }
 
-    
-        // WebSocket connection close handler
-        gameSocket.onclose = function () {
-            console.log("WebSocket connection closed.");
-        };
-    
         // Move button click handler
         document.getElementById("move_button").addEventListener("click", function () {
             const moveInput = document.getElementById("move_position").value.trim();
             if (moveInput) {
                 console.log(`Sending move: ${moveInput}`);
-                gameSocket.send(JSON.stringify({ action: "move", move: moveInput }));
+                sendMove(moveInput);
                 document.getElementById("move_position").value = "";
             } else {
                 alert("Please enter a valid move.");
             }
         });
 
-    
         // Resign button click handler
         document.getElementById("resign_button").addEventListener("click", function () {
             if (confirm("Are you sure you want to resign?")) {
-                // Send resign action via WebSocket
-                gameSocket.send(JSON.stringify({ action: "resign" }));
-                console.log("Resignation sent.");
+                resignGame();
             }
         });
+
+        // Function to update the board based on FEN string
+        function updateBoard(fen) {
+            const pieceUnicode = {
+                'K': '♔',
+                'Q': '♕',
+                'R': '♖',
+                'B': '♗',
+                'N': '♘',
+                'P': '♙',
+                'k': '♚',
+                'q': '♛',
+                'r': '♜',
+                'b': '♝',
+                'n': '♞',
+                'p': '♟',
+            };
+
+            const ranks = fen.split(' ')[0].split('/');
+
+            // The board is from rank 8 to 1
+            let rankIndex = 8;
+            for (let rank of ranks) {
+                let fileIndex = 'a'.charCodeAt(0);
+                for (let char of rank) {
+                    if (isNaN(char)) {
+                        // It's a piece
+                        const cellId = String.fromCharCode(fileIndex) + rankIndex;
+                        const cell = document.getElementById(cellId);
+                        if (cell) {
+                            cell.innerHTML = pieceUnicode[char] || '&nbsp;';
+                        }
+                        fileIndex++;
+                    } else {
+                        // It's a number of empty squares
+                        const emptySquares = parseInt(char);
+                        for (let i = 0; i < emptySquares; i++) {
+                            const cellId = String.fromCharCode(fileIndex) + rankIndex;
+                            const cell = document.getElementById(cellId);
+                            if (cell) {
+                                cell.innerHTML = '&nbsp;';
+                            }
+                            fileIndex++;
+                        }
+                    }
+                }
+                rankIndex--;
+            }
+        }
     </script>
-    
 </body>
 </html>
