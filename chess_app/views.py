@@ -222,112 +222,6 @@ def play_game(request, game_id):
 
 
 
-
-
-# @csrf_exempt
-# @login_required(login_url='/login/')
-# def play_game(request, game_id):
-#     try:
-#         game = Game.objects.get(id=game_id)
-#     except Game.DoesNotExist:
-#         return HttpResponse("Game not found", status=404)
-
-#     # If the game is finished, redirect both players
-#     if game.status == 'finished':
-#         return redirect('game_result', game_id=game.id)
-
-#     # Check if the current user is one of the players
-#     if request.user not in [game.player1, game.player2]:
-#         return HttpResponse("You are not a player in this game", status=403)
-
-#     # Load the current board state
-#     chess_board = chess.Board(game.board.fen)
-
-#     # Determine if it's the current player's turn
-#     is_white = request.user == game.player1
-#     current_player = game.current_turn
-
-#     # Identify the player and the opponent
-#     player_color = "White" if is_white else "Black"
-#     opponent = game.player2 if request.user == game.player1 else game.player1
-
-#     # Check for game termination conditions
-#     if chess_board.is_checkmate():
-#         game.status = 'finished'
-#         game.winner = opponent if current_player == request.user else request.user
-#         game.save()
-#         return redirect('game_result', game_id=game.id)
-
-#     elif chess_board.is_stalemate():
-#         game.status = 'finished'
-#         game.winner = None  # No winner in a stalemate
-#         game.save()
-#         return redirect('game_result', game_id=game.id)
-
-#     if request.method == 'POST':
-#         form = ChessForm(request.POST)
-#         if 'resign' in request.POST:
-#             # If the player resigns, set the opponent as the winner
-#             game.winner = opponent
-#             game.status = 'finished'  # Mark the game as finished
-#             game.save()
-
-#             # Redirect both players to the result page
-#             return redirect('game_result', game_id=game.id)
-
-#         elif 'move' in request.POST and form.is_valid():
-#             move_position = form.cleaned_data.get('move_position')
-
-#             if not move_position or len(move_position) != 4:
-#                 form.add_error(None, "Move must consist of exactly 4 characters (e.g., 'e2e4').")
-#             else:
-#                 start_position = move_position[:2]  # Extract 'e2'
-#                 end_position = move_position[2:]    # Extract 'e4'
-#                 try:
-#                     move = chess.Move.from_uci(start_position + end_position)
-
-#                     # Ensure the move is legal and it's the player's turn
-#                     if move in chess_board.legal_moves:
-#                         # Check if the user is moving their own pieces
-#                         piece = chess_board.piece_at(chess.parse_square(start_position))
-#                         if piece is None:
-#                             form.add_error(None, "No piece at the start position.")
-#                         elif (piece.color == chess.WHITE and not is_white) or (piece.color == chess.BLACK and is_white):
-#                             form.add_error(None, "You can only move your own pieces.")
-#                         else:
-#                             # Apply the move
-#                             chess_board.push(move)
-#                             new_fen = chess_board.fen()
-#                             game.board.fen = new_fen  # Update the FEN after the move
-#                             game.board.save()
-
-#                             game.move_count += 1
-#                             game.current_turn = opponent
-#                             game.save()
-
-#                             return redirect('play_game', game_id=game.id)
-#                     else:
-#                         form.add_error(None, "Illegal move: The move is not allowed.")
-#                 except ValueError:
-#                     form.add_error(None, "Invalid move format. Use correct notation like 'e2e4'.")
-
-#     else:
-#         form = ChessForm()
-
-#     # Convert the board to a dictionary for rendering
-#     board_dict = board_to_dict(game.board.fen)
-
-#     return render(request, 'chess_app/game.html', {
-#         'chessboard': board_dict,
-#         'game': game,
-#         'form': form,
-#         'current_player': current_player,
-#         'is_current_turn': request.user == current_player,
-#         'player_color': player_color,
-#         'opponent': opponent,
-#     })
-
-
 @csrf_exempt
 @login_required(login_url='/login/')
 def game_result(request, game_id):
@@ -395,6 +289,7 @@ def delete_game(request, game_id):
 
 @csrf_exempt
 # Join view for new users
+@csrf_exempt
 def join(request):
     if request.method == "POST":
         join_form = JoinForm(request.POST)
@@ -407,17 +302,21 @@ def join(request):
 
             # Broadcast the new user to all connected users
             channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                "all_users",
-                {
-                    "type": "send_challenge_notification",
-                    "data": {
-                        "type": "new_user",
-                        "user_id": user.id,
-                        "username": user.username,
-                    },
-                }
-            )
+            try:
+                async_to_sync(channel_layer.group_send)(
+                    "all_users",
+                    {
+                        "type": "send_challenge_notification",
+                        "data": {
+                            "type": "new_user",
+                            "user_id": user.id,
+                            "username": user.username,
+                        },
+                    }
+                )
+                logger.info(f"Broadcasted new_user message for user {user.id}")
+            except Exception as e:
+                logger.error(f"Error broadcasting new_user message: {e}")
 
             return redirect("/")
         else:
@@ -426,6 +325,7 @@ def join(request):
         join_form = JoinForm()
 
     return render(request, 'chess_app/join.html', {"join_form": join_form})
+
 
 @csrf_exempt
 # User login

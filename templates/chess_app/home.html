@@ -217,18 +217,23 @@
 
                 // Do not add if the new user is the current user
                 if (userId !== currentUserId) {
-                    // Create a new list item
-                    const userList = document.querySelector('.user-list');
-                    const newUserListItem = document.createElement('li');
-                    newUserListItem.className = 'list-group-item d-flex justify-content-between align-items-center';
-                    newUserListItem.setAttribute('data-user-id', userId);
-                    newUserListItem.innerHTML = `
-                        <span>${username}</span>
-                        <div>
-                            <button class="btn btn-primary btn-sm challenge-btn" data-user-id="${userId}">Challenge</button>
-                        </div>
-                    `;
-                    userList.appendChild(newUserListItem);
+                    // Check if the user already exists in the list to prevent duplicates
+                    const existingUser = document.querySelector(`.user-list li[data-user-id='${userId}']`);
+                    if (!existingUser) {
+                        // Create a new list item
+                        const userList = document.querySelector('.user-list');
+                        const newUserListItem = document.createElement('li');
+                        newUserListItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        newUserListItem.setAttribute('data-user-id', userId);
+                        newUserListItem.innerHTML = `
+                            <span>${username}</span>
+                            <div>
+                                <button class="btn btn-primary btn-sm challenge-btn" data-user-id="${userId}">Challenge</button>
+                            </div>
+                        `;
+                        userList.appendChild(newUserListItem);
+                        console.log(`Added new user ${username} to the challenge list.`);
+                    }
                 }
             }
 

@@ -10,6 +10,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# consumers.py
+
 class ChallengeConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.user = self.scope['user']
@@ -20,44 +22,60 @@ class ChallengeConsumer(AsyncWebsocketConsumer):
             self.user_group_name = f"user_{self.user.id}"
             self.global_group_name = "all_users"
 
-            # Join individual user group
-            await self.channel_layer.group_add(
-                self.user_group_name,
-                self.channel_name
-            )
+            try:
+                # Join individual user group
+                await self.channel_layer.group_add(
+                    self.user_group_name,
+                    self.channel_name
+                )
+                logger.info(f"User {self.user.id} joined group {self.user_group_name}")
 
-            # Join global group
-            await self.channel_layer.group_add(
-                self.global_group_name,
-                self.channel_name
-            )
+                # Join global group
+                await self.channel_layer.group_add(
+                    self.global_group_name,
+                    self.channel_name
+                )
+                logger.info(f"User {self.user.id} joined group {self.global_group_name}")
 
-            await self.accept()
-            logger.info(f"WebSocket connected for user {self.user.id}")
+                await self.accept()
+                logger.info(f"WebSocket connection established for user {self.user.id}")
+            except Exception as e:
+                logger.error(f"Error during WebSocket connection for user {self.user.id}: {e}")
+                await self.close()
 
     async def disconnect(self, close_code):
-        # Leave individual user group
-        await self.channel_layer.group_discard(
-            self.user_group_name,
-            self.channel_name
-        )
+        if not self.user.is_anonymous:
+            try:
+                # Leave individual user group
+                await self.channel_layer.group_discard(
+                    self.user_group_name,
+                    self.channel_name
+                )
+                logger.info(f"User {self.user.id} left group {self.user_group_name}")
 
-        # Leave global group
-        await self.channel_layer.group_discard(
-            self.global_group_name,
-            self.channel_name
-        )
-
-        logger.info(f"WebSocket disconnected for user {self.user.id}")
+                # Leave global group
+                await self.channel_layer.group_discard(
+                    self.global_group_name,
+                    self.channel_name
+                )
+                logger.info(f"User {self.user.id} left group {self.global_group_name}")
+            except Exception as e:
+                logger.error(f"Error during WebSocket disconnection for user {self.user.id}: {e}")
 
     async def receive(self, text_data):
-        # Currently, no need to handle incoming messages for challenges
+        # If you plan to handle incoming messages from clients in the future,
+        # implement the logic here.
+        logger.debug(f"Received message from user {self.user.id}: {text_data}")
         pass
 
     async def send_challenge_notification(self, event):
         data = event.get("data", {})
         logger.info(f"Sending data to user {self.user.id}: {data}")
-        await self.send(text_data=json.dumps(data))
+        try:
+            await self.send(text_data=json.dumps(data))
+        except Exception as e:
+            logger.error(f"Error sending data to user {self.user.id}: {e}")
+
 
         
 class GameConsumer(AsyncWebsocketConsumer):
@@ -211,28 +229,27 @@ class GameConsumer(AsyncWebsocketConsumer):
             return False, {'error': "An error occurred while handling resignation."}
 
 
-# consumers.py
-class ChallengeConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        self.user_id = self.scope["user"].id
-        self.user_group_name = f"user_{self.user_id}"
+# # consumers.py
+# class ChallengeConsumer(AsyncWebsocketConsumer):
+#     async def connect(self):
+#         self.user_id = self.scope["user"].id
+#         self.user_group_name = f"user_{self.user_id}"
 
-        await self.channel_layer.group_add(
-            self.user_group_name,
-            self.channel_name
-        )
-        await self.accept()
+#         await self.channel_layer.group_add(
+#             self.user_group_name,
+#             self.channel_name
+#         )
+#         await self.accept()
 
-    async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            self.user_group_name,
-            self.channel_name
-        )
+#     async def disconnect(self, close_code):
+#         await self.channel_layer.group_discard(
+#             self.user_group_name,
+#             self.channel_name
+#         )
 
-    async def receive(self, text_data):
-        # Handle challenge acceptance or rejection if needed
-        pass
+#     async def receive(self, text_data):
+#         # Handle challenge acceptance or rejection if needed
+#         pass
 
-    async def send_challenge_notification(self, event):
-        await self.send(text_data=json.dumps(event["data"]))
-
+#     async def send_challenge_notification(self, event):
+#         await self.send(text_data=json.dumps(event["data"]))
