@@ -29,7 +29,7 @@ urlpatterns = [
     path('about/',view1_app.about),
     path('join/', view1_app.join,name='join'),
     path('login/', view1_app.user_login,name='login'),
-    path('logout/', view1_app.user_logout),
+    path('logout/', view1_app.user_logout,name='logout'),
     path('journal/', journal_views.journal),
     path('journal/add/', journal_views.add),
     path('journal/edit/<int:id>/', journal_views.edit),

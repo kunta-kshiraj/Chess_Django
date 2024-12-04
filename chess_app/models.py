@@ -4,6 +4,19 @@ import uuid
 import chess
 # from .models import Game  # Assuming Game is in the same models file
 
+class OnlineUser(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='online_status')
+    last_seen = models.DateTimeField(auto_now=True)
+    connection_count = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.user.username} - Online ({self.connection_count} connections)"
+    
+    class Meta:
+        verbose_name = "Online User"
+        verbose_name_plural = "Online Users"
+
+
 class ChessGame(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE)

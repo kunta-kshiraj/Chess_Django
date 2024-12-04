@@ -10,7 +10,9 @@
     <script src="{% static 'chessboard.js' %}"></script>
     <script>
         const csrftoken = '{{ csrf_token }}';
-        const currentUserId = "{{ current_user_id }}";  // Passed from the view
+        // const userId = String(data.user_id);
+        const currentUserId = "{{ current_user_id|add:'' }}";  
+        console.log(`Current User ID: ${currentUserId}, type: ${typeof currentUserId}`);        // const currentUserId = "{{ current_user_id }}";
     </script>
 </head>
 <body>
@@ -109,12 +111,14 @@
                                 {% endif %}
                             </div>
                         </li>
+                        {% empty %}
+                        <li class="list-group-item no-users-online">No users are currently online.</li>
                         {% endfor %}
                     </ul>
                 </div>
                 <!-- Column for game history -->
                 <div class="col-md-6">
-                    <h3>Your Game History</h3>
+                    <h3>Your Previous Games</h3>
                     {% if completed_games %}
                     <table class="table">
                         <thead>
@@ -201,7 +205,7 @@
         // Determine the correct WebSocket protocol
         const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
         const challengeSocket = new WebSocket(`${protocol}${window.location.host}/ws/challenges/`);
-
+        
         challengeSocket.onopen = function () {
             console.log("WebSocket connection established.");
         };
@@ -210,32 +214,93 @@
             console.log("WebSocket message received:", event.data);
             const data = JSON.parse(event.data);
 
-            // Handle new user registration
-            if (data.type === 'new_user') {
+
+            if (data.type === 'user_status') {
                 const userId = data.user_id;
                 const username = data.username;
+                const status = data.status;
 
-                // Do not add if the new user is the current user
-                if (userId !== currentUserId) {
-                    // Check if the user already exists in the list to prevent duplicates
-                    const existingUser = document.querySelector(`.user-list li[data-user-id='${userId}']`);
-                    if (!existingUser) {
-                        // Create a new list item
+                // console.log(`Received user_status: userId=${userId}, currentUserId=${currentUserId}`);
+                console.log(`Received user_status: userId=${userId}, currentUserId=${currentUserId}`);
+                console.log(`userId: ${userId}, type: ${typeof userId}`);
+                console.log(`currentUserId: ${currentUserId}, type: ${typeof currentUserId}`);
+
+                if (status === 'online') {
+                    // Do not add if the new user is the current user
+                    if (Number(userId) !== Number(currentUserId)) {
+                        console.log(`Adding user ${username} to the list.`);
+                        // Check if the user already exists in the list to prevent duplicates
                         const userList = document.querySelector('.user-list');
-                        const newUserListItem = document.createElement('li');
-                        newUserListItem.className = 'list-group-item d-flex justify-content-between align-items-center';
-                        newUserListItem.setAttribute('data-user-id', userId);
-                        newUserListItem.innerHTML = `
-                            <span>${username}</span>
-                            <div>
-                                <button class="btn btn-primary btn-sm challenge-btn" data-user-id="${userId}">Challenge</button>
-                            </div>
-                        `;
-                        userList.appendChild(newUserListItem);
-                        console.log(`Added new user ${username} to the challenge list.`);
+
+                        const noUsersItem = userList.querySelector('.no-users-online');
+                        if (noUsersItem) {
+                            noUsersItem.remove();
+                        }
+                                                
+                        const existingUser = document.querySelector(`.user-list li[data-user-id='${userId}']`);
+                        if (!existingUser) {
+                            // Create a new list item
+                            // const userList = document.querySelector('.user-list');
+                            const newUserListItem = document.createElement('li');
+                            newUserListItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                            newUserListItem.setAttribute('data-user-id', userId);
+                            newUserListItem.innerHTML = `
+                                <span>${username}</span>
+                                <div>
+                                    <button class="btn btn-primary btn-sm challenge-btn" data-user-id="${userId}">Challenge</button>
+                                </div>
+                            `;
+                            userList.appendChild(newUserListItem);
+                            console.log(`Added user ${username} to the challenge list.`);
+                        }
+                    }
+                    else{
+                        console.log(`Not adding current user ${username} to the list.`);
+                    }
+                } 
+                else if (status === 'offline') {
+                    // Remove user from the list
+                    const userListItem = document.querySelector(`.user-list li[data-user-id='${userId}']`);
+                    if (userListItem) {
+                        userListItem.remove();
+                        console.log(`Removed user ${username} from the challenge list.`);
+                    }
+                    const userList = document.querySelector('.user-list');
+                    if (userList.children.length === 0) {
+                        // Add the "No users are currently online" message
+                        const noUsersItem = document.createElement('li');
+                        noUsersItem.className = 'list-group-item no-users-online';
+                        noUsersItem.textContent = 'No users are currently online.';
+                        userList.appendChild(noUsersItem);
                     }
                 }
             }
+            // Handle new user registration
+            // if (data.type === 'new_user') {
+            //     const userId = data.user_id;
+            //     const username = data.username;
+
+            //     // Do not add if the new user is the current user
+            //     if (userId !== currentUserId) {
+            //         // Check if the user already exists in the list to prevent duplicates
+            //         const existingUser = document.querySelector(`.user-list li[data-user-id='${userId}']`);
+            //         if (!existingUser) {
+            //             // Create a new list item
+            //             const userList = document.querySelector('.user-list');
+            //             const newUserListItem = document.createElement('li');
+            //             newUserListItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+            //             newUserListItem.setAttribute('data-user-id', userId);
+            //             newUserListItem.innerHTML = `
+            //                 <span>${username}</span>
+            //                 <div>
+            //                     <button class="btn btn-primary btn-sm challenge-btn" data-user-id="${userId}">Challenge</button>
+            //                 </div>
+            //             `;
+            //             userList.appendChild(newUserListItem);
+            //             console.log(`Added new user ${username} to the challenge list.`);
+            //         }
+            //     }
+            // }
 
             // If a new challenge is received
             if (data.challenger_id && data.challenger_username) {
@@ -290,6 +355,12 @@
             console.log('WebSocket connection closed:', event);
         };
 
+        setInterval(function() {
+            if (challengeSocket.readyState === WebSocket.OPEN) {
+                challengeSocket.send(JSON.stringify({ type: 'heartbeat' }));
+            }
+        }, 30000);
+
         // Function to handle accepting or rejecting challenges
         function handleChallenge(userId, action) {
             fetch(`/handle_challenge/${userId}/${action}/`, {
@@ -337,6 +408,23 @@
             return cookieValue;
         }
 
+        function handleLogout(event) {
+            event.preventDefault();  // Prevent the default link behavior
+            if (challengeSocket && challengeSocket.readyState === WebSocket.OPEN) {
+                // Send a 'logout' message to the server
+                challengeSocket.send(JSON.stringify({ type: 'logout' }));
+                
+                // Close the WebSocket and wait for it to close before redirecting
+                challengeSocket.onclose = function () {
+                    window.location.href = "{% url 'logout' %}";
+                };
+                challengeSocket.close();
+            } else {
+                // If the WebSocket is not open, redirect immediately
+                window.location.href = "{% url 'logout' %}";
+            }
+        }
+
         // Attach event listeners using event delegation
         document.addEventListener('DOMContentLoaded', function () {
             // Event delegation for user list actions
@@ -377,6 +465,7 @@
                 }
             });
         });
+        
     </script>
 
 </body>

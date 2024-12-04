@@ -1,3 +1,5 @@
+from django.utils import timezone
+from datetime import timedelta
 import chess
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
@@ -9,7 +11,7 @@ from django.contrib.auth.models import User
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
-from .models import DeletedGame, Game, JournalEntry
+from .models import DeletedGame, Game, JournalEntry, OnlineUser
 from .forms import JournalForm 
 from django.views.decorators.http import require_POST
 
@@ -156,8 +158,17 @@ def home(request):
     except Game.DoesNotExist:
         pass
 
-    active_users = User.objects.filter(is_active=True).exclude(id=request.user.id)
-
+    now = timezone.now()
+    timeout = now - timedelta(minutes=3)
+    
+    online_users = OnlineUser.objects.filter(last_seen__gte=timeout)
+    print(f"Online users: {online_users}")
+    active_users = User.objects.filter(id__in=online_users.values_list('user_id', flat=True)).exclude(id=request.user.id)
+    # active_users = User.objects.filter(is_active=True).exclude(id=request.user.id)
+    
+    print(f"Current user ID: {request.user.id}")
+    print(f"Active user IDs: {list(active_users.values_list('id', flat=True))}")
+    
     # Fetch pending challenges where the current user is being challenged
     received_challenges = Challenge.objects.filter(challenged=request.user, status='pending')
 
@@ -301,22 +312,22 @@ def join(request):
             login(request, user)  # Log the user in after registration
 
             # Broadcast the new user to all connected users
-            channel_layer = get_channel_layer()
-            try:
-                async_to_sync(channel_layer.group_send)(
-                    "all_users",
-                    {
-                        "type": "send_challenge_notification",
-                        "data": {
-                            "type": "new_user",
-                            "user_id": user.id,
-                            "username": user.username,
-                        },
-                    }
-                )
-                logger.info(f"Broadcasted new_user message for user {user.id}")
-            except Exception as e:
-                logger.error(f"Error broadcasting new_user message: {e}")
+            # channel_layer = get_channel_layer()
+            # try:
+            #     async_to_sync(channel_layer.group_send)(
+            #         "all_users",
+            #         {
+            #             "type": "send_challenge_notification",
+            #             "data": {
+            #                 "type": "new_user",
+            #                 "user_id": user.id,
+            #                 "username": user.username,
+            #             },
+            #         }
+            #     )
+            #     logger.info(f"Broadcasted new_user message for user {user.id}")
+            # except Exception as e:
+            #     logger.error(f"Error broadcasting new_user message: {e}")
 
             return redirect("/")
         else:
@@ -354,8 +365,25 @@ def user_login(request):
 # User logout
 @never_cache
 def user_logout(request):
+    user = request.user
     logout(request)
     messages.success(request, "Logged out successfully.")
+
+    # Mark user as offline in the database
+    OnlineUser.objects.filter(user=user).delete()
+
+    # Notify other users via the channel layer
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        "all_users",
+        {
+            "type": "user_status",
+            "user_id": user.id,
+            "username": user.username,
+            "status": "offline",
+        }
+    )
+
     return redirect('/')
 
 @csrf_exempt

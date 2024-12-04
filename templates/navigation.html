@@ -36,7 +36,7 @@
             </li>
             {% if user.is_authenticated %}
             <li class="nav-item">
-            <a class="nav-link" href="/logout/">Logout ({{ user.username }})</a>
+            <a href="#" onclick="handleLogout(event)" class="nav-link" href="/logout/">Logout ({{ user.username }})</a>
             </li>
             {% else %}
             <li class="nav-item">
