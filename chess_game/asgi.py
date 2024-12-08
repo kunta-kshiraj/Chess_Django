@@ -1,12 +1,7 @@
-# asgi.py
-
 import os
 import django
-
-# Set the default Django settings module
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "chess_game.settings")
 django.setup()
-
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack

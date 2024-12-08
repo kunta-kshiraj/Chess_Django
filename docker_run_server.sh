@@ -1,2 +1,5 @@
-!/bin/sh
-python manage.py runserver 0.0.0.0:80
+#!/bin/bash
+# Exit on error
+set -e
+# Start supervisord to manage processes
+exec /usr/bin/supervisord -n
